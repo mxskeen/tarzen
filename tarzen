@@ -6,25 +6,25 @@ REGISTRY_DIR="${HOME}/.local/share/tarzen/registry"
 INSTALL_LOCATION="/usr/local/bin/tarzen"
 REPO_RAW="https://raw.githubusercontent.com/mxskeen/tarzen/main/tarzen"
 
-COLOR_RED="\033[0;31m"
-COLOR_GREEN="\033[0;32m"
-COLOR_YELLOW="\033[1;33m"
-COLOR_CYAN="\033[0;36m"
-COLOR_BOLD="\033[1m"
-COLOR_RESET="\033[0m"
+COLOR_RED=$'\033[0;31m'
+COLOR_GREEN=$'\033[0;32m'
+COLOR_YELLOW=$'\033[1;33m'
+COLOR_CYAN=$'\033[0;36m'
+COLOR_BOLD=$'\033[1m'
+COLOR_RESET=$'\033[0m'
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
 
-info()  { echo -e "${COLOR_CYAN}[INFO]${COLOR_RESET} $*"; }
-ok()    { echo -e "${COLOR_GREEN}[OK]${COLOR_RESET} $*"; }
-warn()  { echo -e "${COLOR_YELLOW}[WARN]${COLOR_RESET} $*"; }
-err()   { echo -e "${COLOR_RED}[ERROR]${COLOR_RESET} $*" >&2; }
-bold()  { echo -e "${COLOR_BOLD}$*${COLOR_RESET}"; }
+info()  { printf "%b\n" "${COLOR_CYAN}[INFO]${COLOR_RESET} $*"; }
+ok()    { printf "%b\n" "${COLOR_GREEN}[OK]${COLOR_RESET} $*"; }
+warn()  { printf "%b\n" "${COLOR_YELLOW}[WARN]${COLOR_RESET} $*"; }
+err()   { printf "%b\n" "${COLOR_RED}[ERROR]${COLOR_RESET} $*" >&2; }
+bold()  { printf "%b\n" "${COLOR_BOLD}$*${COLOR_RESET}"; }
 
 confirm() {
     local prompt="$1"
     while true; do
-        read -rp "$(echo -e "${COLOR_BOLD}${prompt} (Y/N): ${COLOR_RESET}")" answer < /dev/tty
+        read -rp "$(printf "%b" "${COLOR_BOLD}${prompt} (Y/N): ${COLOR_RESET}")" answer < /dev/tty
         case "$answer" in
             [Yy]) return 0 ;;
             [Nn]) return 1 ;;
@@ -564,7 +564,7 @@ list_installed() {
         name=$(grep '"name"' "$reg_file" | cut -d'"' -f4)
         type=$(grep '"type"' "$reg_file" | cut -d'"' -f4)
         installed_at=$(grep '"installed_at"' "$reg_file" | cut -d'"' -f4)
-        echo "  ${COLOR_BOLD}${name}${COLOR_RESET}  (${type})  — installed ${installed_at}"
+        printf "%b\n" "  ${COLOR_BOLD}${name}${COLOR_RESET}  (${type})  — installed ${installed_at}"
     done
 }
 
@@ -679,18 +679,18 @@ usage() {
     cat <<EOF
 ${COLOR_BOLD}tarzen${COLOR_RESET} v${VERSION} — Universal tar.xz installer
 
-${COLOR_BOLD}INSTALL TARZEN${COLOR_RESET}
+${COLOR_BOLD}INSTALL${COLOR_RESET}
     curl -sL ${REPO_RAW} | sudo bash
 
 ${COLOR_BOLD}USAGE${COLOR_RESET}
-    tarzen install <path-or-url>       Install from a .tar.xz file or URL
-    tarzen uninstall <app-name>        Uninstall a previously installed app
-    tarzen list                        List apps installed via tarzen
-    tarzen info                        Show system/distro info
+    tarzen install <path-or-url>     Install from a .tar.xz file or URL
+    tarzen uninstall <app-name>      Uninstall an app installed via tarzen
+    tarzen list                      List apps installed via tarzen
+    tarzen info                      Show system/distro info
 
 ${COLOR_BOLD}SELF-MANAGEMENT${COLOR_RESET}
-    tarzen --self-install              Install/update tarzen itself
-    tarzen --self-uninstall            Remove tarzen from system
+    tarzen --self-install            Install/update tarzen itself
+    tarzen --self-uninstall          Remove tarzen from system
 
 ${COLOR_BOLD}EXAMPLES${COLOR_RESET}
     sudo tarzen install ./firefox.tar.xz
