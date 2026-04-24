@@ -215,6 +215,43 @@ detect_content_type() {
     echo "unknown"
 }
 
+find_app_icon() {
+    local src_dir="$1"
+    local app_id="$2"
+
+    local icon_path=""
+    icon_path=$(find "$src_dir" -maxdepth 5 -type f \( -iname "*.png" -o -iname "*.svg" -o -iname "*.xpm" \) \
+        | grep -i -E "(icon|logo|${app_id})" | head -1 || true)
+
+    if [[ -z "$icon_path" ]]; then
+        icon_path=$(find "$src_dir" -maxdepth 5 -type f \( -iname "*.png" -o -iname "*.svg" -o -iname "*.xpm" \) | head -1 || true)
+    fi
+
+    if [[ -z "$icon_path" ]]; then
+        icon_path=$(find "$src_dir" -maxdepth 5 -type f -iname "*.ico" | head -1 || true)
+    fi
+
+    echo "$icon_path"
+}
+
+stage_app_icon() {
+    local icon_src="$1"
+    local target_dir="$2"
+    local app_id="$3"
+
+    if [[ -z "$icon_src" || ! -f "$icon_src" ]]; then
+        echo ""
+        return 0
+    fi
+
+    local icon_ext
+    icon_ext="${icon_src##*.}"
+    local icon_dest="${target_dir}/${app_id}.${icon_ext}"
+
+    cp "$icon_src" "$icon_dest"
+    echo "$icon_dest"
+}
+
 # ─── Install Functions ─────────────────────────────────────────────────────────
 
 install_binary() {
@@ -286,7 +323,12 @@ install_binary() {
 
  local desktop_name
  desktop_name=$(echo "$opt_name" | sed 's/.*/\u&/')
- create_desktop_entry "$opt_name" "$desktop_name" "/opt/$opt_name/$(basename "$main_exe")" "$src_dir"
+
+ local icon_src icon_path
+ icon_src=$(find_app_icon "$src_dir" "$opt_name")
+ icon_path=$(stage_app_icon "$icon_src" "/opt/$opt_name" "$opt_name")
+
+ create_desktop_entry "$opt_name" "$desktop_name" "/opt/$opt_name/$(basename "$main_exe")" "$icon_path"
 
  register_install "$app_name" "binary" "/opt/$opt_name" "/usr/local/bin/$exe_name" "$exe_name"
  ok "Installed $desktop_name!"
@@ -316,7 +358,11 @@ install_appimage() {
     info "Linking to /usr/local/bin/$opt_name..."
     ln -sf "/opt/$opt_name/$exe_name" "/usr/local/bin/$opt_name"
 
-    create_desktop_entry "$opt_name" "$opt_name" "/opt/$opt_name/$exe_name" "$src_dir"
+    local icon_src icon_path
+    icon_src=$(find_app_icon "$src_dir" "$opt_name")
+    icon_path=$(stage_app_icon "$icon_src" "/opt/$opt_name" "$opt_name")
+
+    create_desktop_entry "$opt_name" "$opt_name" "/opt/$opt_name/$exe_name" "$icon_path"
 
     register_install "$app_name" "appimage" "/opt/$opt_name" "/usr/local/bin/$opt_name" "$opt_name"
     ok "Installed $opt_name!"
@@ -460,15 +506,7 @@ create_desktop_entry() {
     local app_id="$1"
     local display_name="$2"
     local exec_path="$3"
-    local src_dir="$4"
-
-    local icon_path=""
-    icon_path=$(find "$src_dir" -maxdepth 5 -type f \( -name "*.png" -o -name "*.svg" -o -name "*.xpm" \) \
-        | grep -i -E "(icon|logo|${app_id})" | head -1)
-
-    if [[ -z "$icon_path" ]]; then
-        icon_path=$(find "$src_dir" -maxdepth 5 -type f \( -name "*.png" -o -name "*.svg" \) | head -1)
-    fi
+    local icon_path="$4"
 
     local icon_line="Icon=application-x-executable"
     if [[ -n "$icon_path" ]]; then
