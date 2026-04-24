@@ -244,6 +244,8 @@ stage_app_icon() {
         return 0
     fi
 
+    mkdir -p "$target_dir"
+
     local icon_ext
     icon_ext="${icon_src##*.}"
     local icon_dest="${target_dir}/${app_id}.${icon_ext}"
@@ -309,6 +311,7 @@ install_binary() {
 
  info "Installing to /opt/$opt_name..."
  rm -rf "/opt/$opt_name"
+ mkdir -p "/opt/$opt_name"
 
  # If executable was in root, copy files; otherwise move the subdirectory
  if [[ "$install_dir" == "$src_dir" ]]; then
@@ -330,7 +333,7 @@ install_binary() {
 
  create_desktop_entry "$opt_name" "$desktop_name" "/opt/$opt_name/$(basename "$main_exe")" "$icon_path"
 
- register_install "$app_name" "binary" "/opt/$opt_name" "/usr/local/bin/$exe_name" "$exe_name"
+ register_install "$opt_name" "binary" "/opt/$opt_name" "/usr/local/bin/$exe_name" "$exe_name"
  ok "Installed $desktop_name!"
  ok "Run with: $exe_name"
 }
@@ -364,7 +367,7 @@ install_appimage() {
 
     create_desktop_entry "$opt_name" "$opt_name" "/opt/$opt_name/$exe_name" "$icon_path"
 
-    register_install "$app_name" "appimage" "/opt/$opt_name" "/usr/local/bin/$opt_name" "$opt_name"
+    register_install "$opt_name" "appimage" "/opt/$opt_name" "/usr/local/bin/$opt_name" "$opt_name"
     ok "Installed $opt_name!"
     ok "Run with: $opt_name"
 }
