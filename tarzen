@@ -2,9 +2,19 @@
 set -euo pipefail
 
 VERSION="1.0.0"
-REGISTRY_DIR="${HOME}/.local/share/tarzen/registry"
 INSTALL_LOCATION="/usr/local/bin/tarzen"
 REPO_RAW="https://raw.githubusercontent.com/mxskeen/tarzen/main/tarzen"
+
+get_target_home() {
+    if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+        getent passwd "$SUDO_USER" | cut -d: -f6
+    else
+        echo "$HOME"
+    fi
+}
+
+REGISTRY_DIR="$(get_target_home)/.local/share/tarzen/registry"
+LEGACY_REGISTRY_DIR="/root/.local/share/tarzen/registry"
 
 COLOR_RED=$'\033[0;31m'
 COLOR_GREEN=$'\033[0;32m'
@@ -254,6 +264,24 @@ stage_app_icon() {
     echo "$icon_dest"
 }
 
+refresh_desktop_caches() {
+    if command -v update-desktop-database &>/dev/null; then
+        update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+    fi
+
+    if command -v gtk-update-icon-cache &>/dev/null; then
+        gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+    fi
+}
+
+post_install_note() {
+    local app_name="$1"
+    echo ""
+    info "If the app icon does not appear in search yet, log out and back in once."
+    info "You can also restart the desktop shell or re-open the app launcher."
+    ok "$app_name is installed."
+}
+
 # ─── Install Functions ─────────────────────────────────────────────────────────
 
 install_binary() {
@@ -329,13 +357,20 @@ install_binary() {
 
  local icon_src icon_path
  icon_src=$(find_app_icon "$src_dir" "$opt_name")
- icon_path=$(stage_app_icon "$icon_src" "/opt/$opt_name" "$opt_name")
+ icon_path=$(stage_app_icon "$icon_src" "/usr/share/icons/hicolor/256x256/apps" "$opt_name")
 
- create_desktop_entry "$opt_name" "$desktop_name" "/opt/$opt_name/$(basename "$main_exe")" "$icon_path"
+ local desktop_icon=""
+ if [[ -n "$icon_path" ]]; then
+     desktop_icon="$opt_name"
+ fi
+
+ create_desktop_entry "$opt_name" "$desktop_name" "/opt/$opt_name/$(basename "$main_exe")" "$desktop_icon"
 
  register_install "$opt_name" "binary" "/opt/$opt_name" "/usr/local/bin/$exe_name" "$exe_name"
+ refresh_desktop_caches
  ok "Installed $desktop_name!"
  ok "Run with: $exe_name"
+ post_install_note "$desktop_name"
 }
 
 install_appimage() {
@@ -363,13 +398,20 @@ install_appimage() {
 
     local icon_src icon_path
     icon_src=$(find_app_icon "$src_dir" "$opt_name")
-    icon_path=$(stage_app_icon "$icon_src" "/opt/$opt_name" "$opt_name")
+    icon_path=$(stage_app_icon "$icon_src" "/usr/share/icons/hicolor/256x256/apps" "$opt_name")
 
-    create_desktop_entry "$opt_name" "$opt_name" "/opt/$opt_name/$exe_name" "$icon_path"
+    local desktop_icon=""
+    if [[ -n "$icon_path" ]]; then
+        desktop_icon="$opt_name"
+    fi
+
+    create_desktop_entry "$opt_name" "$opt_name" "/opt/$opt_name/$exe_name" "$desktop_icon"
 
     register_install "$opt_name" "appimage" "/opt/$opt_name" "/usr/local/bin/$opt_name" "$opt_name"
+    refresh_desktop_caches
     ok "Installed $opt_name!"
     ok "Run with: $opt_name"
+    post_install_note "$opt_name"
 }
 
 install_deb() {
@@ -615,19 +657,28 @@ cmd_uninstall() {
 list_installed() {
     ensure_registry
 
-    if [[ -z $(ls -A "$REGISTRY_DIR" 2>/dev/null) ]]; then
-        echo "  No apps installed via tarzen."
-        return
+    local registry_dirs=("$REGISTRY_DIR")
+    if [[ "$REGISTRY_DIR" != "$LEGACY_REGISTRY_DIR" && -d "$LEGACY_REGISTRY_DIR" ]]; then
+        registry_dirs+=("$LEGACY_REGISTRY_DIR")
     fi
 
-    for reg_file in "$REGISTRY_DIR"/*.json; do
-        [[ -f "$reg_file" ]] || continue
-        local name type installed_at
-        name=$(grep '"name"' "$reg_file" | cut -d'"' -f4)
-        type=$(grep '"type"' "$reg_file" | cut -d'"' -f4)
-        installed_at=$(grep '"installed_at"' "$reg_file" | cut -d'"' -f4)
-        printf "%b\n" "  ${COLOR_BOLD}${name}${COLOR_RESET}  (${type})  — installed ${installed_at}"
+    local found_any=0
+    for dir in "${registry_dirs[@]}"; do
+        [[ -d "$dir" ]] || continue
+        for reg_file in "$dir"/*.json; do
+            [[ -f "$reg_file" ]] || continue
+            found_any=1
+            local name type installed_at
+            name=$(grep '"name"' "$reg_file" | cut -d'"' -f4)
+            type=$(grep '"type"' "$reg_file" | cut -d'"' -f4)
+            installed_at=$(grep '"installed_at"' "$reg_file" | cut -d'"' -f4)
+            printf "%b\n" "  ${COLOR_BOLD}${name}${COLOR_RESET}  (${type})  — installed ${installed_at}"
+        done
     done
+
+    if [[ "$found_any" -eq 0 ]]; then
+        echo "  No apps installed via tarzen."
+    fi
 }
 
 # ─── Main Install Flow ─────────────────────────────────────────────────────────
