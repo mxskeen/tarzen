@@ -1,6 +1,6 @@
 # tarzen
 
-Universal `.tar.xz` installer for Linux. One command to extract, detect, and install — no matter what's inside.
+Universal `.tar.xz` / `.tar.gz` installer for Linux. One command to extract, detect, and install — no matter what's inside.
 
 ## Install
 
@@ -11,11 +11,12 @@ curl -sL https://raw.githubusercontent.com/mxskeen/tarzen/main/tarzen | sudo bas
 ## Usage
 
 ```bash
-sudo tarzen install ./app.tar.xz                # local file
-sudo tarzen install https://example.com/app.tar.xz  # from URL
-tarzen list                                     # see installed apps
-sudo tarzen uninstall <app-name>                # remove an app
-tarzen info                                     # show system info
+sudo tarzen install ./app.tar.xz   # local file
+sudo tarzen install ./app.tar.gz   # local file (gzipped)
+sudo tarzen install https://example.com/app.tar.xz # from URL
+tarzen list # see installed apps
+sudo tarzen uninstall <app-name> # remove an app
+tarzen info # show system info
 ```
 
 ## What it handles
@@ -42,8 +43,8 @@ Auto-detects your distro and package manager via `/etc/os-release`. Works on Ubu
 ## Self-management
 
 ```bash
-tarzen --self-install      # install/update tarzen itself
-tarzen --self-uninstall    # remove tarzen from system
+tarzen --self-install # install/update tarzen itself
+tarzen --self-uninstall # remove tarzen from system
 ```
 
 ## Uninstall tarzen

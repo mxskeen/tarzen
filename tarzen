@@ -218,58 +218,72 @@ detect_content_type() {
 # ─── Install Functions ─────────────────────────────────────────────────────────
 
 install_binary() {
-    local src_dir="$1"
-    local app_name="$2"
+ local src_dir="$1"
+ local app_name="$2"
 
-    local install_dir
-    install_dir=$(find "$src_dir" -maxdepth 1 -type d ! -path "$src_dir" | head -1)
-    if [[ -z "$install_dir" ]]; then
-        install_dir="$src_dir"
-    fi
+ # Find the main executable
+ local main_exe=""
+ local exe_name=""
+ local install_dir=""
 
-    # Find the main executable
-    local main_exe=""
-    local exe_name=""
+ # First: check if executable matches app_name in root
+ if [[ -f "$src_dir/$app_name" ]] && file "$src_dir/$app_name" | grep -qi "ELF.*executable"; then
+   main_exe="$src_dir/$app_name"
+   exe_name="$app_name"
+   install_dir="$src_dir"
+ fi
 
-    if [[ -f "$install_dir/$app_name" ]]; then
-        main_exe="$install_dir/$app_name"
-        exe_name="$app_name"
-    else
-        while IFS= read -r -d '' f; do
-            if file "$f" | grep -qi "ELF.*executable"; then
-                main_exe="$f"
-                exe_name=$(basename "$f")
-                break
-            fi
-        done < <(find "$install_dir" -maxdepth 2 -type f -executable -print0 2>/dev/null)
-    fi
+ # Second: check for any ELF executable in root directory
+ if [[ -z "$main_exe" ]]; then
+   while IFS= read -r -d '' f; do
+     if file "$f" | grep -qi "ELF.*executable"; then
+       main_exe="$f"
+       exe_name=$(basename "$f")
+       install_dir="$src_dir"
+       break
+     fi
+   done < <(find "$src_dir" -maxdepth 1 -type f -executable -print0 2>/dev/null)
+ fi
 
-    if [[ -z "$main_exe" ]]; then
-        err "Could not find a main executable in the archive."
-        err "The archive may need manual installation. Contents:"
-        find "$src_dir" -maxdepth 3 -type f -executable 2>/dev/null | head -20
-        return 1
-    fi
+ # Third: check in subdirectories
+ if [[ -z "$main_exe" ]]; then
+   while IFS= read -r -d '' f; do
+     if file "$f" | grep -qi "ELF.*executable"; then
+       main_exe="$f"
+       exe_name=$(basename "$f")
+       # Get the parent directory as install_dir
+       install_dir=$(dirname "$f")
+       break
+     fi
+   done < <(find "$src_dir" -maxdepth 3 -type f -executable -print0 2>/dev/null)
+ fi
 
-    local opt_name="${exe_name%.*}"
-    if [[ -z "$opt_name" ]]; then
-        opt_name="$app_name"
-    fi
+ if [[ -z "$main_exe" ]]; then
+   err "Could not find a main executable in the archive."
+   err "The archive may need manual installation. Contents:"
+   find "$src_dir" -maxdepth 3 -type f -executable 2>/dev/null | head -20
+   return 1
+ fi
 
-    info "Installing to /opt/$opt_name..."
-    rm -rf "/opt/$opt_name"
-    mv "$install_dir" "/opt/$opt_name"
+ local opt_name="${exe_name%.*}"
+ if [[ -z "$opt_name" ]]; then
+   opt_name="$app_name"
+ fi
 
-    info "Linking binary to /usr/local/bin/$exe_name..."
-    ln -sf "/opt/$opt_name/$(basename "$main_exe")" "/usr/local/bin/$exe_name"
+ info "Installing to /opt/$opt_name..."
+ rm -rf "/opt/$opt_name"
+ mv "$install_dir" "/opt/$opt_name"
 
-    local desktop_name
-    desktop_name=$(echo "$opt_name" | sed 's/.*/\u&/')
-    create_desktop_entry "$opt_name" "$desktop_name" "/opt/$opt_name/$(basename "$main_exe")" "$src_dir"
+ info "Linking binary to /usr/local/bin/$exe_name..."
+ ln -sf "/opt/$opt_name/$(basename "$main_exe")" "/usr/local/bin/$exe_name"
 
-    register_install "$app_name" "binary" "/opt/$opt_name" "/usr/local/bin/$exe_name" "$exe_name"
-    ok "Installed $desktop_name!"
-    ok "Run with: $exe_name"
+ local desktop_name
+ desktop_name=$(echo "$opt_name" | sed 's/.*/\u&/')
+ create_desktop_entry "$opt_name" "$desktop_name" "/opt/$opt_name/$(basename "$main_exe")" "$src_dir"
+
+ register_install "$app_name" "binary" "/opt/$opt_name" "/usr/local/bin/$exe_name" "$exe_name"
+ ok "Installed $desktop_name!"
+ ok "Run with: $exe_name"
 }
 
 install_appimage() {
@@ -600,23 +614,41 @@ cmd_install() {
         exit 1
     fi
 
-    # Validate extension
-    if ! echo "$tar_file" | grep -qiE "\.tar\.xz$|\.txz$"; then
-        warn "File doesn't have .tar.xz extension. Attempting to extract anyway..."
-    fi
+ # Validate extension and detect compression type
+ local compression_type="xz"
+ if echo "$tar_file" | grep -qiE "\.tar\.gz$|\.tgz$"; then
+   compression_type="gz"
+ elif echo "$tar_file" | grep -qiE "\.tar\.xz$|\.txz$"; then
+   compression_type="xz"
+ else
+   warn "File doesn't have .tar.xz or .tar.gz extension. Attempting to extract anyway..."
+ fi
 
-    # Extract
-    local extract_dir
-    extract_dir=$(mktemp -d)
-    trap 'rm -rf "$tmp_dir" "$extract_dir"' EXIT
+ # Extract
+ local extract_dir
+ extract_dir=$(mktemp -d)
 
-    info "Extracting archive..."
-    if ! tar -xf "$tar_file" -C "$extract_dir"; then
-        err "Extraction failed. Is this a valid .tar.xz file?"
-        exit 1
-    fi
+ # Cleanup function that handles both tmp_dir and extract_dir
+ cleanup() {
+   [[ -n "${tmp_dir:-}" && -d "$tmp_dir" ]] && rm -rf "$tmp_dir"
+   [[ -n "$extract_dir" && -d "$extract_dir" ]] && rm -rf "$extract_dir"
+ }
+ trap cleanup EXIT
 
-    # Show contents
+
+ # Use appropriate tar flag based on compression type
+ if [[ "$compression_type" == "gz" ]]; then
+   if ! tar -xzf "$tar_file" -C "$extract_dir"; then
+     err "Extraction failed. Is this a valid archive?"
+     exit 1
+   fi
+ else
+   if ! tar -xJf "$tar_file" -C "$extract_dir"; then
+     err "Extraction failed. Is this a valid .tar.xz file?"
+     exit 1
+   fi
+ fi
+
     echo ""
     info "Archive contents:"
     find "$extract_dir" -maxdepth 2 -type f | sed "s|$extract_dir/||" | head -30
@@ -624,7 +656,7 @@ cmd_install() {
 
     # Determine app name
     local app_name
-    app_name=$(basename "$tar_file" | sed -E 's/\.(tar\.xz|txz)$//' | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+ app_name=$(basename "$tar_file" | sed -E 's/\.(tar\.xz|txz|tar\.gz|tgz)$//' | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
     info "App name: $app_name"
 
     # Detect content type
