@@ -638,7 +638,7 @@ cmd_install() {
  # Cleanup function that handles both tmp_dir and extract_dir
  cleanup() {
    [[ -n "${tmp_dir:-}" && -d "$tmp_dir" ]] && rm -rf "$tmp_dir"
-   [[ -n "$extract_dir" && -d "$extract_dir" ]] && rm -rf "$extract_dir"
+    [[ -n "${extract_dir:-}" && -d "$extract_dir" ]] && rm -rf "$extract_dir"
  }
  trap cleanup EXIT
 
