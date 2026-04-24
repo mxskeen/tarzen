@@ -272,7 +272,14 @@ install_binary() {
 
  info "Installing to /opt/$opt_name..."
  rm -rf "/opt/$opt_name"
- mv "$install_dir" "/opt/$opt_name"
+
+ # If executable was in root, copy files; otherwise move the subdirectory
+ if [[ "$install_dir" == "$src_dir" ]]; then
+   cp -r "$src_dir"/* "/opt/$opt_name/" 2>/dev/null || true
+   cp -r "$src_dir"/.[!.]* "/opt/$opt_name/" 2>/dev/null || true
+ else
+   mv "$install_dir" "/opt/$opt_name/"
+ fi
 
  info "Linking binary to /usr/local/bin/$exe_name..."
  ln -sf "/opt/$opt_name/$(basename "$main_exe")" "/usr/local/bin/$exe_name"
